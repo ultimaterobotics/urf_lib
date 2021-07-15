@@ -3,7 +3,7 @@
 
 #include <stdint.h>
 
-#define BLE_DEBUG_PRINTS
+//#define BLE_DEBUG_PRINTS
 
 //=============ADVERTISING SECTION=============
 

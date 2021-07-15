@@ -30,6 +30,11 @@ void time_start()
 //	NVIC_SetPriority(TIMER2_IRQn, 0);	
 	NVIC_EnableIRQ(TIMER2_IRQn);
 	NVIC_SetPriority(TIMER2_IRQn, 2);
+	mcs_time = 0;
+	ms_time = 0;
+	s_time = 0;
+	ms_counter = 0;
+	s_counter = 0;
 	NRF_TIMER2->TASKS_START = 1;
 	timer_on = 1;
 }
@@ -45,7 +50,9 @@ void time_resume()
 }
 void time_stop()
 {
-	NRF_TIMER2->TASKS_STOP = 1;
+	NVIC_DisableIRQ(TIMER2_IRQn);
+//	NRF_TIMER2->TASKS_STOP = 1;
+	NRF_TIMER2->TASKS_SHUTDOWN = 1;
 	timer_on = 0;
 }
 

@@ -468,7 +468,7 @@ void ble_process_ATT(int length, volatile uint8_t *pdu, sATT_link *att_link)
 		int read_descr = -1;
 		for(int c = 0; c < characteristics_count; c++)
 		{
-			if(handle == all_characteristics_idx[c]->handle)
+			if(handle == all_characteristics_idx[c]->value_handle)
 			{
 				chr = all_characteristics_idx[c];
 				is_good = 1;
@@ -486,6 +486,9 @@ void ble_process_ATT(int length, volatile uint8_t *pdu, sATT_link *att_link)
 		}
 		if(!is_good)
 		{
+#ifdef BLE_DEBUG_PRINTS
+			uprintf("ATT WRITE: handle not found\n");
+#endif
 			ble_ATT_error_respond(ATT_WRITE_REQ, handle, ATT_ERROR_ATTRIBUTE_NOT_FOUND, att_link);
 			goto BLE_ATT_PROCESSING_END;
 		}
@@ -496,9 +499,16 @@ void ble_process_ATT(int length, volatile uint8_t *pdu, sATT_link *att_link)
 			int val_len = length - 3;
 			if(val_len > 24) val_len = 24;
 			for(int x = 0; x < val_len; x++)
+			{
 				chr->value[x] = pdu[3+x];
+				chr->value_write_cache[x] = pdu[3+x];
+			}
 			chr->val_length = val_len;
+			chr->val_cached_length = val_len;
 			chr->had_write = 1;
+#ifdef BLE_DEBUG_PRINTS
+			uprintf("ATT WRITE: filled len %d\n", val_len);
+#endif
 		}
 		else
 		{
@@ -507,6 +517,68 @@ void ble_process_ATT(int length, volatile uint8_t *pdu, sATT_link *att_link)
 
 		att_link->response_pending = 1;
 		att_link->response_length = 1;
+		
+		goto BLE_ATT_PROCESSING_END;
+	}	
+
+	if(opcode == ATT_WRITE_CMD)
+	{
+		handled = 1;
+		uint16_t handle = pdu[1] | (pdu[2]<<8);
+#ifdef BLE_DEBUG_PRINTS
+		uprintf("ATT WRITE CMD %d\n", handle);
+#endif
+		sCharacteristic *chr;
+		int is_good = 0;
+		int read_descr = -1;
+		for(int c = 0; c < characteristics_count; c++)
+		{
+			if(handle == all_characteristics_idx[c]->value_handle)
+			{
+				chr = all_characteristics_idx[c];
+				is_good = 1;
+				break;
+			}
+			for(int d = 0; d < all_characteristics_idx[c]->descriptor_count; d++)
+				if(handle == all_characteristics_idx[c]->descriptor_handles[d])
+				{
+					chr = all_characteristics_idx[c];
+					is_good = 1;
+					read_descr = d;
+					break;
+				}
+			if(read_descr >= 0) break;
+		}
+		//no response is needed either for error or success
+		if(!is_good)
+		{
+#ifdef BLE_DEBUG_PRINTS
+			uprintf("ATT WRITE CMD: handle not found\n");
+#endif
+			goto BLE_ATT_PROCESSING_END;
+		}
+//		att_link->response_buf[0] = ATT_WRITE_RSP;
+		
+		if(read_descr < 0)
+		{		
+			int val_len = length - 3;
+			if(val_len > 24) val_len = 24;
+			for(int x = 0; x < val_len; x++)
+			{
+				chr->value[x] = pdu[3+x];
+				chr->value_write_cache[x] = pdu[3+x];
+			}
+			chr->val_length = val_len;
+			chr->val_cached_length = val_len;
+			chr->had_write = 1;
+#ifdef BLE_DEBUG_PRINTS
+			uprintf("ATT WRITE CMD: filled len %d\n", val_len);
+#endif
+		}
+		else
+		{
+			chr->descriptor_values[read_descr] = pdu[3] | (pdu[4]<<8);
+		}
 		
 		goto BLE_ATT_PROCESSING_END;
 	}	

@@ -30,6 +30,8 @@ typedef struct sCharacteristic
 	int val_type;
 	int val_length;
 	uint8_t value[96];
+	int val_cached_length;
+	uint8_t value_write_cache[96];
 	
 	uint8_t changed; //changed from the program, if indication/notification is required - it will be performed
 	uint8_t had_write; //way to notify the program that value was read - it may want to update it

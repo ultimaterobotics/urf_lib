@@ -44,6 +44,8 @@ void rf_disable()
 
 void rf_init_ext(int channel, int speed, int crc_len, int white_en, int s1_sz, int added_length, int max_length)
 {
+	NVIC_DisableIRQ(RADIO_IRQn);
+	NRF_RADIO->POWER = 1;
     // Radio config
     NRF_RADIO->TXPOWER   = (RADIO_TXPOWER_TXPOWER_Pos4dBm << RADIO_TXPOWER_TXPOWER_Pos);
     NRF_RADIO->FREQUENCY = channel;
@@ -63,6 +65,7 @@ void rf_init_ext(int channel, int speed, int crc_len, int white_en, int s1_sz, i
     NRF_RADIO->RXADDRESSES = 0b00000001;        // receive on address 0
 
 	NRF52_PCNF0_REG conf0;
+	conf0.reg = 0;
 	conf0.length_bitsz = 8;
 	conf0.S0_bytesz = 1;
 	conf0.S1_bitsz = s1_sz;
@@ -73,6 +76,7 @@ void rf_init_ext(int channel, int speed, int crc_len, int white_en, int s1_sz, i
     NRF_RADIO->PCNF0 = conf0.reg;
 	
 	NRF52_PCNF1_REG conf1;
+	conf1.reg = 0;
 	conf1.max_length = max_length;
 	conf1.added_length = added_length; 
 	conf1.addr_len = 4;
@@ -86,11 +90,15 @@ void rf_init_ext(int channel, int speed, int crc_len, int white_en, int s1_sz, i
 	NRF_RADIO->CRCCNF = crc_len;
 	NRF_RADIO->CRCINIT = 0b10101010;   // Initial value
 	NRF_RADIO->CRCPOLY = 0b100000111;  // CRC poly: x^8+x^2+x^1+1
-	
+	NRF_RADIO->EVENTS_DISABLED = 0;
+	NRF_RADIO->EVENTS_END = 0; 
+
+	NRF_RADIO->INTENCLR = 0xFFFFFFFF;
 //	NRF_RADIO->INTENSET = 0b01000; //END event
 	NRF_RADIO->INTENSET = 0b01010; //END & ADDRESS events
-	NVIC_EnableIRQ(RADIO_IRQn);
+	rf_irq_override = NULL;
 	NVIC_SetPriority(RADIO_IRQn, 0);
+	NVIC_EnableIRQ(RADIO_IRQn);
 }
 
 void rf_init(int channel, int speed, int crc_len)
@@ -122,10 +130,14 @@ void rf_mode_tx_only()
 	NRF_RADIO->SHORTS = RADIO_SHORTS_READY_START_Msk | RADIO_SHORTS_END_DISABLE_Msk;
 	NRF_RADIO->TASKS_TXEN = 1;
 	current_mode = rm_tx_end;
+	rf_busy = 1;
 }
 void rf_mode_tx_then_rx()
 {
-	while(rf_busy) ;
+	uint32_t start_ms;
+	if(rf_busy) start_ms = millis();
+	while(rf_busy && millis() - start_ms < 3) ;
+
 	if(!(NRF_RADIO->STATE == st_radio_txru || NRF_RADIO->STATE == st_radio_txidle))
 	{
 		rf_disable();
@@ -137,13 +149,18 @@ void rf_mode_tx_then_rx()
 	current_mode = rm_tx2rx;
 	while(NRF_RADIO->STATE == st_radio_disabled || NRF_RADIO->STATE == st_radio_txdisable || NRF_RADIO->STATE == st_radio_rxdisable) ;
 	NRF_RADIO->SHORTS |= RADIO_SHORTS_DISABLED_RXEN_Msk | RADIO_SHORTS_ADDRESS_RSSISTART_Msk;
+	rf_busy = 1;
 }
 
 void rf_send(uint8_t *pack, int length)
 {
 	for(int x = 0; x < length; x++)
 		tx_packet[x] = pack[x];
-	while(rf_busy) ;
+
+	uint32_t start_ms;
+	if(rf_busy) start_ms = millis();
+	while(rf_busy && millis() - start_ms < 3) ;
+
 	NRF_RADIO->PACKETPTR = (uint32_t)tx_packet;
 	rf_mode_tx_only();
 }
@@ -158,7 +175,9 @@ void rf_send_and_listen(uint8_t *pack, int length)
 {
 	for(int x = 0; x < length; x++)
 		tx_packet[x] = pack[x];
-	while(rf_busy) ;
+	uint32_t start_ms;
+	if(rf_busy) start_ms = millis();
+	while(rf_busy && millis() - start_ms < 3) ;
 	NRF_RADIO->PACKETPTR = (uint32_t)tx_packet;
 	rf_mode_tx_then_rx();
 }
@@ -227,7 +246,7 @@ void RADIO_IRQHandler()
 	if(NRF_RADIO->EVENTS_ADDRESS)
 	{
 		handled = 1;
-		rf_busy = 1;
+//		rf_busy = 1; temporary turn off busy indication
 		NRF_RADIO->EVENTS_ADDRESS = 0;
 	}
 	if(NRF_RADIO->EVENTS_END)// && (NRF_RADIO->INTENSET & RADIO_INTENSET_END_Msk))
