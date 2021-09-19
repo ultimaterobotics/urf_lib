@@ -15,10 +15,10 @@ urf_ble_encryption.c
 urf_ble_smp_process.c
 
 #### urf_timer
-Contains time tracking, delay, and scheduled task functions. Among other things, provides Arduino-style functions millis(), micros(), delay_ms(), delay_mcs(). Detailed description: 
+Contains time tracking, delay, and scheduled task functions. Among other things, provides Arduino-style functions millis(), micros(), delay_ms(), delay_mcs(). Detailed description: https://github.com/ultimaterobotics/urf_lib/blob/main/urf_timer.md 
 
-### urf_radio
+#### urf_radio
 Radio functions. Provides simple init functions for radio hardware (with some assumptions, but those can be overriden without side effects), handles rx/tx modes and places received packets in temporary buffer for processing outside of interrupt function (depending on the project, may be convenient or unusable). Allows setting custom interrupt processing funuction instead of default one. Detailed description: 
 
-### urf_ble_peripheral
+#### urf_ble_peripheral
 BLE functions. Has simple interface for sending advertising packets, manages BLE connection state, service discovery, and allows reading/writing BLE characteristics. Calls GATT related functions from **urf_ble_att_process.c**, SMP related functions from **urf_ble_smp_process.c** and if encryption is used, hardware encryption is accessed from **urf_ble_encryption.c**. Detailed description:  
