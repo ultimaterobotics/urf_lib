@@ -155,7 +155,7 @@ void ble_process_ATT(int length, volatile uint8_t *pdu, sATT_link *att_link)
 				}
 				else
 				{
-					if(pos + 18 > att_link->mtu) break;
+					if(pos + 19 > att_link->mtu) break;
 					att_link->response_buf[pos++] = 2;
 					att_link->response_buf[pos++] = all_services_idx[s]->handle;
 					att_link->response_buf[pos++] = all_services_idx[s]->handle>>8;

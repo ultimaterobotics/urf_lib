@@ -4,6 +4,7 @@ void time_start();
 void time_pause();
 void time_resume();
 void time_stop();
+void time_adjust(int ms_shift);
 uint32_t micros();
 uint32_t millis();
 uint32_t seconds();

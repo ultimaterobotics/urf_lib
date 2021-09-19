@@ -335,11 +335,11 @@ void ble_LL_hop()
 	if(ms - ll_link.last_rx_event_time > 1500 + (ll_link.timeout < 1000?ll_link.timeout*10:10000))
 	{
 		ble_conn_mode = ble_mode_advertising;
+		schedule_event_stop();
 		ble_init_radio();
 #ifdef BLE_DEBUG_PRINTS
 		uprintf("LL timeout: %lu %lu\n", ms, ll_link.last_rx_event_time);
 #endif
-		schedule_event_stop();
 		if(!ll_link.reached_att_stage)
 			ble_ll_same_event_response = !ble_ll_same_event_response;
 	}

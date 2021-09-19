@@ -20,9 +20,9 @@ typedef struct sCharacteristic
 	uint16_t value_handle;
 	
 	int descriptor_count;
-	uint16_t descriptor_uuids[8];
-	uint16_t descriptor_handles[8];
-	uint16_t descriptor_values[8];
+	uint16_t descriptor_uuids[16];
+	uint16_t descriptor_handles[16];
+	uint16_t descriptor_values[16];
 	
 	uint16_t uuid_16;
 	uint8_t uuid_128[16];

@@ -180,6 +180,13 @@ void TIMER2_IRQHandler(void)
 	}
 }
 
+void time_adjust(uint32_t ms_shift)
+{
+	ms_time += ms_shift;
+	s_time += ms_shift / 1000;
+	mcs_time += (ms_shift*1000);
+}
+
 void delay_ms(uint32_t ms)
 {
 	if(!timer_on) return;
