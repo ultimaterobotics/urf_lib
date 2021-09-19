@@ -3,7 +3,7 @@
 Time functions are using hardware timer TIMER2 for time counting and delays, and TIMER3 for scheduling. Both timers should not be used by other project code.
 Time counting is based on calling interrupt once per 250 microseconds by default (can be changed by changing TIME_RESOLUTION define, but it must not exceed 1000 and preferably should be divisor of 1000)
 
-#### void time_start()
+### void time_start()
 Initializes TIMER2, sets time to zero, activates time interrupt. Should be called once at the project beginning, after HFO is initialized.
 
 ### void time_pause()
