@@ -3,7 +3,7 @@
 Functions that are wrapping register settings, interrupts, shorts of NRF_RADIO hardware and handle rx/tx states
 
 #### void rf_init(int channel, int speed, int crc_len)
-Simple radio init on a fixed channel (range 0-100 corresponding to frequencies 2400...2500 MHz), with given radio speed (allowed values are 250, 1000 and 2000 KBit/s) and given CRC length (allowed values 0-3)
+Simple radio init on a fixed channel (range 0-100 corresponding to frequencies 2400...2500 MHz), with given radio speed (allowed values are 250, 1000 and 2000 KBit/s) and given CRC length (allowed values 0-3). If two devices are configured with the same parameters, they can send data to each other (as long as one is listening, another is sending in each of communication events - device can't simultaneously send and listen).
 
 #### void rf_init_ext(int channel, int speed, int crc_len, int white_en, int s1_sz, int added_length, int max_length)
 Same as **rf_init** but with additional parameters from PCNF0, PCNF1 of the NRF_RADIO: white_en - enable whitening, s1_sz - size of S1 field, added_length - number of bytes transmitted after packet length is sent, max_length - maximum transmitted length 
