@@ -70,6 +70,12 @@ void rf_autorespond_off();
 
 void rf_override_irq(void (*new_irq));
 
+void rf_attach_rx_irq(void (*rx_irq));
+void rf_dettach_rx_irq();
+
+void rf_attach_tx_irq(void (*tx_irq));
+void rf_dettach_tx_irq();
+
 int rf_has_new_packet();
 uint32_t rf_get_packet(uint8_t *pack);
 int rf_get_ack_state();

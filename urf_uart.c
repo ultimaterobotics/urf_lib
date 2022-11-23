@@ -4,16 +4,16 @@
 #include "urf_uart.h"
 #include "nrf.h"
 
-uint8_t uart_buf[290]; //+32 bytes due to batch size
-uint32_t uart_buf_length = 256;
-volatile uint8_t uart_buf_pos = 0;
+uint8_t uart_buf_rx[290]; //+32 bytes due to batch size
+uint32_t uart_rx_length = 256;
+volatile uint8_t uart_rx_pos = 0;
 
-uint8_t send_buf[516];
+uint8_t uart_buf_tx[530];
 volatile uint16_t uart_transaction_end = 0;
 volatile uint16_t uart_scheduled_end = 0;
 volatile int send_complete = 1;
-int send_buf_length = 512;
-int send_tx_size = 32;
+int uart_tx_length = 512;
+int send_tx_size = 64;
 int uart_inited = 0;
 int rx_batch_size = 1;
 
@@ -62,6 +62,8 @@ void uart_init(int pin_TX, int pin_RX, int speed)
 		NRF_UARTE0->BAUDRATE = 0x0EBEDFA4;
 	else if(speed == 1000000)
 		NRF_UARTE0->BAUDRATE = 0x10000000;
+	else if(speed == 2000000) //experimental
+		NRF_UARTE0->BAUDRATE = 0x20000000;
 	else //not from standard list - use simple rounding
 	{
 		NRF_UARTE0->BAUDRATE = 0x10000000 / 1000000 * speed;
@@ -74,25 +76,32 @@ void uart_init(int pin_TX, int pin_RX, int speed)
 
 	NVIC_EnableIRQ(UARTE0_UART0_IRQn);
 	
-	NRF_UARTE0->RXD.PTR = (uint32_t)uart_buf;
+	NRF_UARTE0->RXD.PTR = (uint32_t)uart_buf_rx;
 	NRF_UARTE0->RXD.MAXCNT = rx_batch_size;
 	NRF_UARTE0->TASKS_STARTRX = 1;
 	NRF_UARTE0->SHORTS = 0b100000; //ENDRX_STARTRX
 	uart_inited = 1;
 }
+void uart_shutdown()
+{
+	NVIC_DisableIRQ(UARTE0_UART0_IRQn);
+	NRF_UARTE0->ENABLE = 0;
+	uart_inited = 0;
+}
+
 
 void uart_update_tx()
 {
 	if(uart_transaction_end == uart_scheduled_end) return;
-	NRF_UARTE0->TXD.PTR = (uint32_t)send_buf + uart_transaction_end;
+	NRF_UARTE0->TXD.PTR = (uint32_t)uart_buf_tx + uart_transaction_end;
 	int transf_len = uart_scheduled_end - uart_transaction_end;
 	if(transf_len < 0)
 	{
-		transf_len = uart_buf_length - uart_transaction_end;
+		transf_len = uart_tx_length - uart_transaction_end;
 		if(transf_len > send_tx_size) transf_len = send_tx_size;
 		NRF_UARTE0->TXD.MAXCNT = transf_len;
 		uart_transaction_end += transf_len;
-		if(uart_transaction_end >= uart_buf_length) uart_transaction_end = 0;
+		if(uart_transaction_end >= uart_tx_length) uart_transaction_end = 0;
 	}
 	else
 	{
@@ -100,7 +109,7 @@ void uart_update_tx()
 		if(transf_len > send_tx_size) transf_len = send_tx_size;
 		NRF_UARTE0->TXD.MAXCNT = transf_len;
 		uart_transaction_end += transf_len;
-		if(uart_transaction_end >= uart_buf_length) uart_transaction_end = 0;
+		if(uart_transaction_end >= uart_tx_length) uart_transaction_end = 0;
 	}
 	send_complete = 0;
 	NRF_UARTE0->TASKS_STARTTX = 1;
@@ -113,8 +122,8 @@ void uart_send(uint8_t *buf, int length)
 	uint16_t pos = uart_scheduled_end;
 	for(int x = 0; x < length; x++)
 	{
-		send_buf[pos++] = buf[x];
-		if(pos >= uart_buf_length) pos = 0;
+		uart_buf_tx[pos++] = buf[x];
+		if(pos >= uart_tx_length) pos = 0;
 	}
 	uart_scheduled_end = pos;
 
@@ -148,27 +157,27 @@ void UARTE0_UART0_IRQHandler()
 	else if(NRF_UARTE0->EVENTS_ENDRX) 
 	{
 		NRF_UARTE0->EVENTS_ENDRX = 0;
-		uart_buf_pos += NRF_UARTE0->RXD.AMOUNT;
-		if(uart_buf_pos >= uart_buf_length)
+		uart_rx_pos += NRF_UARTE0->RXD.AMOUNT;
+		if(uart_rx_pos >= uart_rx_length)
 		{
-			for(int n = uart_buf_length; n < uart_buf_pos; n++)
-				uart_buf[n-uart_buf_length] = uart_buf[n];
-			uart_buf_pos -= uart_buf_length;
+			for(int n = uart_rx_length; n < uart_rx_pos; n++)
+				uart_buf_rx[n-uart_rx_length] = uart_buf_rx[n];
+			uart_rx_pos -= uart_rx_length;
 		}
-		NRF_UARTE0->RXD.PTR = (uint32_t)uart_buf + uart_buf_pos;
+		NRF_UARTE0->RXD.PTR = (uint32_t)uart_buf_rx + uart_rx_pos;
 		NRF_UARTE0->TASKS_STARTRX = 1;
     }
 	else if(NRF_UARTE0->EVENTS_RXTO) 
 	{
 		NRF_UARTE0->EVENTS_RXTO = 0;
-		uart_buf_pos += NRF_UARTE0->RXD.AMOUNT;
-		if(uart_buf_pos >= uart_buf_length)
+		uart_rx_pos += NRF_UARTE0->RXD.AMOUNT;
+		if(uart_rx_pos >= uart_rx_length)
 		{
-			for(int n = uart_buf_length; n < uart_buf_pos; n++)
-				uart_buf[n-uart_buf_length] = uart_buf[n];
-			uart_buf_pos -= uart_buf_length;
+			for(int n = uart_rx_length; n < uart_rx_pos; n++)
+				uart_buf_rx[n-uart_rx_length] = uart_buf_rx[n];
+			uart_rx_pos -= uart_rx_length;
 		}
-		NRF_UARTE0->RXD.PTR = (uint32_t)uart_buf + uart_buf_pos;
+		NRF_UARTE0->RXD.PTR = (uint32_t)uart_buf_rx + uart_rx_pos;
 		NRF_UARTE0->TASKS_STARTRX = 1;
     }
 
@@ -185,15 +194,15 @@ void UARTE0_UART0_IRQHandler()
 
 uint32_t uart_get_rx_position()
 {
-	return uart_buf_pos;
+	return uart_rx_pos;
 }
 uint8_t *uart_get_rx_buf()
 {
-	return uart_buf;
+	return uart_buf_rx;
 }
 uint32_t uart_get_rx_buf_length()
 {
-	return uart_buf_length;
+	return uart_rx_length;
 }
 
 uint8_t umsg[256];

@@ -39,6 +39,7 @@ int ble_ll_same_event_response = 0; //experimentally found that with iPhones, we
 sATT_link att_link;
 sSMP_link smp_link;
 
+int ble_is_connectable = 1;
 int ble_conn_mode = ble_mode_off;
 int ble_conn_state = ble_adv_idle;
 int ble_radio_rxtx = ble_radio_off;
@@ -120,11 +121,31 @@ void ble_LL_respond_PDU(uint32_t addr, int pdu_length, uint8_t *pdu, int ble_cha
 
 	ble_radio_rxtx = ble_radio_tx;
 }
+void ble_send_advertisement_packet(int pdu_length, uint8_t *pdu, int ble_channel)
+{
+	ble_LL_send_PDU(0x8E89BED6, pdu_length, pdu, ble_channel);
+}
+
+
+void ble_set_connection_mode(int is_connectable)
+{
+	ble_is_connectable = is_connectable;
+}
 
 void ble_set_our_mac(uint8_t *mac)
 {
 	for(int x = 0; x < 6; x++)
 		ll_link.our_mac[x] = mac[x];
+}
+
+int ble_add_field_to_pdu(uint8_t *pdu, int pdu_len, uint8_t *data, int data_len, uint8_t data_type)
+{
+	int pdu_pos = pdu_len;
+	pdu[pdu_pos++] = data_len + 1;
+	pdu[pdu_pos++] = data_type;
+	for(int x = 0; x < data_len; x++)
+		pdu[pdu_pos++] = data[x];
+	return pdu_pos;
 }
 
 int ble_prepare_adv_pdu(uint8_t *pdu, int payload_len, uint8_t *payload, uint8_t type, uint8_t rand_rx, uint8_t rand_tx)
@@ -157,7 +178,8 @@ void ble_init_radio()
 	
 	//start random numbers generator - values will be used in random number generator in multiple places
 	ble_rand_init();
-	
+	rf_dettach_rx_irq();
+	rf_dettach_tx_irq();
 	rf_override_irq(ble_radio_irq);
 	ble_encr_ccm_config(0); //turn off encryption by default
 	NRF_RADIO->POWER = 1;
@@ -1221,7 +1243,7 @@ void ble_adv_irq()
 	if(ble_radio_rxtx & ble_radio_tx) //sending complete
 	{
 		NRF_RADIO->PACKETPTR = (uint32_t)ble_rx_buffer;
-		rf_mode_rx_only();
+		if(ble_is_connectable) rf_mode_rx_only();
 		NRF_RADIO->SHORTS |= RADIO_SHORTS_END_DISABLE_Msk;
 		NRF_RADIO->SHORTS |= RADIO_SHORTS_DISABLED_TXEN_Msk;
 		ble_radio_rxtx = ble_radio_rx;
@@ -1246,10 +1268,10 @@ void ble_adv_irq()
 			int our_dev = 1;
 			for(int x = 0; x < 6; x++)
 				if(ll_link.our_mac[x] != ble_rx_buffer[3+6+x]) our_dev = 0;
-			if(!our_dev)
+			if(!our_dev || !ble_is_connectable)
 			{
 				ble_conn_state = prev_ble_state;
-				rf_mode_rx_only(); //continue listening
+				if(ble_is_connectable) rf_mode_rx_only(); //continue listening
 #ifdef BLE_DEBUG_PRINTS
 				uprintf("scan req to another device\n");
 #endif
@@ -1318,7 +1340,7 @@ void ble_adv_irq()
 #endif
 			return;
 		}
-		rf_mode_rx_only(); //default: continue listening
+		if(ble_is_connectable) rf_mode_rx_only(); //default: continue listening
 	}
 }
 

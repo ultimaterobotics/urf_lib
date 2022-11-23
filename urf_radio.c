@@ -22,6 +22,8 @@ uint8_t resp_length = 0;
 uint8_t auto_respond = 0;
 
 void (*rf_irq_override)() = NULL;
+void (*rf_rx_irq)() = NULL;
+void (*rf_tx_irq)() = NULL;
 
 volatile int rf_busy = 0;
 
@@ -53,6 +55,8 @@ void rf_init_ext(int channel, int speed, int crc_len, int white_en, int s1_sz, i
 		NRF_RADIO->MODE      = (RADIO_MODE_MODE_Nrf_250Kbit << RADIO_MODE_MODE_Pos);
 	if(speed == 1000)
 		NRF_RADIO->MODE      = (RADIO_MODE_MODE_Nrf_1Mbit << RADIO_MODE_MODE_Pos);
+	if(speed == 1001)
+		NRF_RADIO->MODE      = (RADIO_MODE_MODE_Ble_1Mbit << RADIO_MODE_MODE_Pos);
 	if(speed == 2000)
 		NRF_RADIO->MODE      = (RADIO_MODE_MODE_Nrf_2Mbit << RADIO_MODE_MODE_Pos);
 
@@ -86,6 +90,8 @@ void rf_init_ext(int channel, int speed, int crc_len, int white_en, int s1_sz, i
     // Packet configuration
     NRF_RADIO->PCNF1 = conf1.reg;
 
+	NRF_RADIO->TIFS = 30;
+
     // CRC Config
 	NRF_RADIO->CRCCNF = crc_len;
 	NRF_RADIO->CRCINIT = 0b10101010;   // Initial value
@@ -94,8 +100,8 @@ void rf_init_ext(int channel, int speed, int crc_len, int white_en, int s1_sz, i
 	NRF_RADIO->EVENTS_END = 0; 
 
 	NRF_RADIO->INTENCLR = 0xFFFFFFFF;
-//	NRF_RADIO->INTENSET = 0b01000; //END event
-	NRF_RADIO->INTENSET = 0b01010; //END & ADDRESS events
+	NRF_RADIO->INTENSET = 0b01000; //END event
+//	NRF_RADIO->INTENSET = 0b01010; //END & ADDRESS events
 	rf_irq_override = NULL;
 	NVIC_SetPriority(RADIO_IRQn, 0);
 	NVIC_EnableIRQ(RADIO_IRQn);
@@ -173,8 +179,13 @@ void rf_listen()
 }
 void rf_send_and_listen(uint8_t *pack, int length)
 {
-	for(int x = 0; x < length; x++)
-		tx_packet[x] = pack[x];
+	uint32_t *pp = (uint32_t*)pack;
+	uint32_t *tp = (uint32_t*)tx_packet;
+	for(int x = 0; x < (length>>2)+1; x++)
+		*tp++ = *pp++;
+	
+//	for(int x = 0; x < length; x++)
+//		tx_packet[x] = pack[x];
 	uint32_t start_ms;
 	if(rf_busy) start_ms = millis();
 	while(rf_busy && millis() - start_ms < 3) ;
@@ -187,8 +198,12 @@ int rf_has_new_packet()
 }
 uint32_t rf_get_packet(uint8_t *pack)
 {
-	for(int x = 0; x < rx_packet[1]; x++)
-		pack[x] = rx_packet[x];
+//	for(int x = 0; x < rx_packet[1]; x++)
+//		pack[x] = rx_packet[x];
+	uint32_t *pp = (uint32_t*)pack;
+	uint32_t *rp = (uint32_t*)rx_packet;
+	for(int x = 0; x < (rx_packet[1]>>2)+1; x++)
+		*pp++ = *rp++;
 	last_processed_rx_packet = rx_packet_counter;
 	return rx_packet[1];
 }
@@ -219,6 +234,26 @@ void rf_override_irq(void (*new_irq))
 	rf_irq_override = new_irq;
 }
 
+void rf_attach_rx_irq(void (*rx_irq))
+{
+	rf_rx_irq = rx_irq;
+}
+void rf_dettach_rx_irq()
+{
+	rf_rx_irq = NULL;
+}
+
+void rf_attach_tx_irq(void (*tx_irq))
+{
+	rf_tx_irq = tx_irq;
+}
+void rf_dettach_tx_irq()
+{
+	rf_tx_irq = NULL;
+}
+
+
+
 void rf_clear_events()
 {
 	NRF_RADIO->EVENTS_READY = 0;
@@ -243,6 +278,8 @@ void RADIO_IRQHandler()
 		return;
 	}
 	uint8_t handled = 0;
+	uint8_t need_call_tx_cplt = 0;
+	uint8_t need_call_rx_cplt = 0;
 	if(NRF_RADIO->EVENTS_ADDRESS)
 	{
 		handled = 1;
@@ -254,8 +291,15 @@ void RADIO_IRQHandler()
 		handled = 1;
 		rf_busy = 0;
 		NRF_RADIO->EVENTS_END = 0;
-		if(current_mode == rm_tx_end) ;
-		else if(current_mode == rm_rx_end) rx_packet_counter++;
+		if(current_mode == rm_tx_end)
+		{
+			need_call_tx_cplt = 1;
+		}
+		else if(current_mode == rm_rx_end)
+		{
+			rx_packet_counter++;
+			need_call_rx_cplt = 1;
+		}
 		else if(current_mode == rm_tx2rx)
 		{
 //			uprintf("switching to rx, %d\n", rx_packet_counter);
@@ -267,8 +311,9 @@ void RADIO_IRQHandler()
 			NRF_RADIO->SHORTS = RADIO_SHORTS_READY_START_Msk | RADIO_SHORTS_ADDRESS_RSSISTART_Msk; //no need to END->DISABLE with DISABLED->RXEN
 //			rf_listen();
 			current_mode = rm_rx2rx;
+			need_call_tx_cplt = 1;
 		}
-		else if(current_mode == rm_rx2rx || current_mode == rm_rx2tx)
+		else if(current_mode == rm_rx2rx)
 		{
 			rx_packet_counter++;
 			if(auto_respond)
@@ -303,6 +348,7 @@ void RADIO_IRQHandler()
 			}
 			else
 			{
+				need_call_rx_cplt = 1;
 				current_mode = rm_rx2rx;
 				NRF_RADIO->TASKS_START = 1; //in case if we are in RXIDLE
 			}
@@ -313,6 +359,8 @@ void RADIO_IRQHandler()
 		rf_busy = 0;
 		rf_clear_events();
 	}
+	if(need_call_tx_cplt && rf_tx_irq != NULL) rf_tx_irq();
+	if(need_call_rx_cplt && rf_rx_irq != NULL) rf_rx_irq();
 }
 
 int rf_get_ack_state()

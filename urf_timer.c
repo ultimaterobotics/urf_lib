@@ -61,6 +61,10 @@ uint32_t micros()
 	NRF_TIMER2->TASKS_CAPTURE[2] = 1;
 	return mcs_time + NRF_TIMER2->CC[2];
 }
+uint32_t micros_count()
+{
+	return mcs_time;
+}
 uint32_t millis()
 {
 	return ms_time;
@@ -180,7 +184,7 @@ void TIMER2_IRQHandler(void)
 	}
 }
 
-void time_adjust(uint32_t ms_shift)
+void time_adjust(int ms_shift)
 {
 	ms_time += ms_shift;
 	s_time += ms_shift / 1000;

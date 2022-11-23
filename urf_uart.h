@@ -8,3 +8,4 @@ uint8_t *uart_get_rx_buf();
 uint32_t uart_get_rx_buf_length();
 void uprintf( const char * format, ... );
 void uhex_print(volatile uint8_t *buf, int len, int spaced);
+void uart_shutdown();

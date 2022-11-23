@@ -6,6 +6,7 @@ void time_resume();
 void time_stop();
 void time_adjust(int ms_shift);
 uint32_t micros();
+uint32_t micros_count(); //based on time interrupt, default step 250 us
 uint32_t millis();
 uint32_t seconds();
 void delay_ms(uint32_t ms);

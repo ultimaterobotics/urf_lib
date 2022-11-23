@@ -1,7 +1,9 @@
 #include "urf_ble_att_process.h"
+#define MAX_SERVICE_COUNT 16
+#define MAX_CHARACTERISTICS_COUNT 64
 
-sService* all_services_idx[32];
-sCharacteristic *all_characteristics_idx[128];
+sService* all_services_idx[MAX_SERVICE_COUNT];
+sCharacteristic *all_characteristics_idx[MAX_CHARACTERISTICS_COUNT];
 int service_count = 0;
 int characteristics_count = 0;
 
@@ -16,7 +18,7 @@ void ble_update_our_mtu(int size)
 
 int ble_add_service(sService* srv)
 {
-	if(service_count > 31) return -1;
+	if(service_count >= MAX_SERVICE_COUNT) return -1;
 	srv->mem_idx = service_count;
 	all_services_idx[service_count++] = srv;
 	return service_count;
@@ -24,7 +26,7 @@ int ble_add_service(sService* srv)
 
 int ble_add_characteristic(sCharacteristic* chr)
 {
-	if(characteristics_count > 127) return -1;
+	if(characteristics_count >= MAX_CHARACTERISTICS_COUNT) return -1;
 	chr->mem_idx = characteristics_count;
 	all_characteristics_idx[characteristics_count++] = chr;
 	return characteristics_count;
@@ -257,9 +259,9 @@ void ble_process_ATT(int length, volatile uint8_t *pdu, sATT_link *att_link)
 			goto BLE_ATT_PROCESSING_END;
 		}
 		uint16_t type = pdu[5] | (pdu[6]<<8);
-		uint8_t type_128[8];
+		uint8_t type_128[16];
 		if(length > 16) //128-bit UUID
-			for(int n = 0; n < 8; n++)
+			for(int n = 0; n < 16; n++)
 				type_128[n] = pdu[5+n];
 			
 		att_link->response_buf[0] = ATT_READ_BY_TYPE_RSP;
@@ -339,6 +341,14 @@ void ble_process_ATT(int length, volatile uint8_t *pdu, sATT_link *att_link)
 					att_link->response_buf[pos++] = 2 + chr->val_length;
 					att_link->response_buf[pos++] = chr->value_handle;
 					att_link->response_buf[pos++] = chr->value_handle>>8;
+/*					if(!chr->value_not_ready)
+					{
+						chr->val_send_cache_length = chr->val_length;
+						for(int n = 0; n < chr->val_length; n++)
+							chr->value_send_cache[n] = chr->value[n];
+					}
+					for(int n = 0; n < chr->val_send_cache_length; n++)
+						att_link->response_buf[pos++] = chr->value_send_cache[n];*/
 					for(int n = 0; n < chr->val_length; n++)
 						att_link->response_buf[pos++] = chr->value[n];
 					break;
@@ -524,6 +534,8 @@ void ble_process_ATT(int length, volatile uint8_t *pdu, sATT_link *att_link)
 	if(opcode == ATT_WRITE_CMD)
 	{
 		handled = 1;
+		att_link->response_pending = 0;
+		att_link->response_length = 0;
 		uint16_t handle = pdu[1] | (pdu[2]<<8);
 #ifdef BLE_DEBUG_PRINTS
 		uprintf("ATT WRITE CMD %d\n", handle);
