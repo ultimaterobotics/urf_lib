@@ -1,3 +1,6 @@
-GNU_INSTALL_ROOT := /home/the_3d6/devtools/gcc-arm-none-eabi-8-2018-q4-major/bin/
-GNU_VERSION := 8.2.1
+# Path that contains bin/arm-none-eabi-gcc  (no need for /bin at the end)
+GNU_INSTALL_ROOT := /usr
+# ‘arm-none-eabi-gcc --version’ first line gives you this
+GNU_VERSION := 13.2.1
+# Executable prefix
 GNU_PREFIX := arm-none-eabi
