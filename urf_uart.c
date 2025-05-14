@@ -74,7 +74,8 @@ void uart_init(int pin_TX, int pin_RX, int speed)
 //	NRF_UARTE0->INTEN = (1<<8); //ENDTX
 	NRF_UARTE0->ENABLE = 8;
 
-	NVIC_EnableIRQ(UARTE0_UART0_IRQn);
+	NVIC_EnableIRQ(UARTE0_UART0_IRQn);//52832
+	NVIC_EnableIRQ(UART0_IRQn);//52810
 	
 	NRF_UARTE0->RXD.PTR = (uint32_t)uart_buf_rx;
 	NRF_UARTE0->RXD.MAXCNT = rx_batch_size;
@@ -84,7 +85,8 @@ void uart_init(int pin_TX, int pin_RX, int speed)
 }
 void uart_shutdown()
 {
-	NVIC_DisableIRQ(UARTE0_UART0_IRQn);
+	NVIC_DisableIRQ(UARTE0_UART0_IRQn);//52832
+	NVIC_DisableIRQ(UART0_IRQn);//52810
 	NRF_UARTE0->ENABLE = 0;
 	uart_inited = 0;
 }
@@ -140,7 +142,7 @@ int uart_send_remains()
 //	else return send_end - send_start;
 }
 
-void UARTE0_UART0_IRQHandler()
+void uart_irq_handler()
 {
     if(NRF_UARTE0->EVENTS_ENDTX) 
 	{
@@ -190,6 +192,16 @@ void UARTE0_UART0_IRQHandler()
 	NRF_UARTE0->EVENTS_RXSTARTED = 0;
 	NRF_UARTE0->EVENTS_TXSTARTED = 0;
 	NRF_UARTE0->EVENTS_TXSTOPPED = 0;*/
+}
+
+void UARTE0_UART0_IRQHandler() //52832
+{
+	uart_irq_handler();
+}
+
+void UARTE0_IRQHandler() //52810
+{
+	uart_irq_handler();
 }
 
 uint32_t uart_get_rx_position()

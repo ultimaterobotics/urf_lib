@@ -32,7 +32,7 @@ int ble_add_characteristic(sCharacteristic* chr)
 	return characteristics_count;
 }
 
-void ble_uuid_from_text(uint8_t* uuid, uint8_t *uuid_str)
+void ble_uuid_from_text(uint8_t* uuid, char *uuid_str)
 {
 	//03B80E5A EDE84B33 A7516CE3 4EC4C700
 //	MIDI_service.uuid_128[0] = 0x4EC4C700;

@@ -89,6 +89,7 @@ void rf_init_ext(int channel, int speed, int crc_len, int white_en, int s1_sz, i
 	
     // Packet configuration
     NRF_RADIO->PCNF1 = conf1.reg;
+    NRF_RADIO->DATAWHITEIV = 0x40;
 
 	NRF_RADIO->TIFS = 30;
 

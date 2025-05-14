@@ -94,3 +94,5 @@ void ble_peripheral_generate_keys();
 
 void ble_peripheral_generate_mac(uint8_t *res);
 int ble_peripheral_in_pairing();
+
+uint32_t ble_get_hop_time_mcs();
