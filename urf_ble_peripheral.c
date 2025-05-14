@@ -246,6 +246,12 @@ void ble_LL_radio_off()
 }
 
 volatile uint32_t hop_time_mcs = 0;
+
+uint32_t ble_get_hop_time_mcs()
+{
+	return hop_time_mcs;
+}
+
 void ble_LL_hop()
 {
 	int had_change = 0;	
@@ -405,7 +411,10 @@ void ble_LL_start_connect()
 //	schedule_event_delayed((ll_link.offset + ll_link.win_size)*1250*16-3000, ll_link.interval*1250*16, ble_LL_hop, 1); //doesn't work
 //	schedule_event_delayed((ll_link.offset + ll_link.win_size)*1250*16, ll_link.interval*1250*16, ble_LL_hop, 1); //sometimes works
 	
-	schedule_event((ll_link.offset*1250-300)*16, ble_LL_hop, 0); 
+	if(ll_link.offset > 1)
+		schedule_event((ll_link.offset*1250-300)*16, ble_LL_hop, 0); 
+	else
+		schedule_event((1*1250-300)*16, ble_LL_hop, 0); 
 //	schedule_event_delayed((ll_link.offset + ll_link.win_size + ll_link.interval)*1250*16, ll_link.interval*1250*16, ble_LL_hop, 1); //works ok
 	
 	NRF_RADIO->PACKETPTR = (uint32_t)ble_rx_buffer;

@@ -56,7 +56,7 @@ typedef struct sService
 void ble_update_our_mtu(int size);
 int ble_add_service(sService* srv);
 int ble_add_characteristic(sCharacteristic* chr);
-void ble_uuid_from_text(uint8_t* uuid, uint8_t *uuid_str);
+void ble_uuid_from_text(uint8_t* uuid, char *uuid_str);
 void ble_clear_notifications(sATT_link *att_link);
 void ble_ATT_error_respond(uint8_t failed_opcode, uint16_t failed_attribute, uint8_t error_code, sATT_link *att_link);
 void ble_process_ATT(int length, volatile uint8_t *pdu, sATT_link *att_link);

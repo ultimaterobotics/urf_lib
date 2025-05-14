@@ -4,9 +4,10 @@
 #include "nrf.h"
 
 #define STAR_MAX_NODES 64
+#define STAR_NODE_PAYLOAD_SIZE 8
 
 int role_central = 0;
-int cycle_step_mcs = 1000;
+int cycle_step_mcs = 2500;
 uint8_t cur_out_pack[256];
 uint8_t in_pack[256];
 uint8_t buf_pack[256]; //in_pack has the most recent radio packet, and it's copied into buf_pack if it matches protocol
@@ -22,6 +23,7 @@ int active_nodes = 0; //nodes that didn't respond for a while are removed from l
 uint32_t node_list[STAR_MAX_NODES]; //IDs of active units
 uint32_t node_active[STAR_MAX_NODES]; //last activity in milliseconds
 uint8_t node_pack_id[STAR_MAX_NODES];
+uint8_t node_payload[STAR_MAX_NODES*STAR_NODE_PAYLOAD_SIZE];
 uint32_t last_phase_start = 0;
 int active_timeout = 30000; //when consider unit not responsive and stop requesting
 
@@ -32,6 +34,7 @@ uint32_t no_ask_timeout = 3000; //when to consider that base is unaware of the u
 uint32_t no_sync_timeout = 10000; //when to consider that base doesn't use star protocol and just send data
 uint32_t last_pack_sent = 0;
 uint32_t nonstar_send_interval_mcs = 3000;
+uint32_t last_star_sent_ms = 0;
 
 void star_init(int channel, int speed, int phase_length_mcs, int is_central)
 {
@@ -49,13 +52,29 @@ void star_set_id(uint32_t id)
 	star_unit_id = id;
 }
 
+void star_send_to_node(uint32_t node_id, uint8_t *payload_8b)
+{
+	int idx = -1;
+	for(int x = 0; x < active_nodes; x++)
+		if(node_list[x] == node_id)
+		{
+			idx = x;
+			break;
+		}
+	if(idx < 0) return;
+	for(int x = 0; x < STAR_NODE_PAYLOAD_SIZE; x++)
+	{
+		node_payload[STAR_NODE_PAYLOAD_SIZE*idx+x] = payload_8b[x];
+	}
+}
+
 void star_queue_send(uint8_t *pack, int length)
 {
 	if(role_central)
 	{
 		for(int x = 0; x < length; x++)
 			cur_out_pack[16+x] = pack[x];
-		cur_pack_len = length;
+		cur_pack_len = 16+length;
 	}
 	else
 	{
@@ -165,6 +184,11 @@ void loop_central()
 		cur_out_pack[9] = (cycle_step_mcs>>16)&0xFF;
 		cur_out_pack[10] = (cycle_step_mcs>>8)&0xFF;
 		cur_out_pack[11] = cycle_step_mcs&0xFF;
+		uint32_t ms = millis();
+		cur_out_pack[12] = ms>>24;
+		cur_out_pack[13] = ms>>16;
+		cur_out_pack[14] = ms>>8;
+		cur_out_pack[15] = ms;
 	}
 	else 
 	{
@@ -178,7 +202,9 @@ void loop_central()
 		cur_out_pack[5] = tx_id&0xFF;
 		cur_out_pack[6] = 1; //protocol version
 		cur_out_pack[7] = active_nodes;
-		cur_out_pack[8] = node_pack_id[cycle_phase-1];
+//		cur_out_pack[8] = node_pack_id[cycle_phase-1];
+		for(int x = 0; x < STAR_NODE_PAYLOAD_SIZE; x++)
+			cur_out_pack[8+x] = node_payload[STAR_NODE_PAYLOAD_SIZE*(cycle_phase-1)+x];
 		
 //		static uint32_t rep_sent_ms = 0;
 //		static int rep_cnt = 0;
@@ -196,6 +222,9 @@ void loop_central()
 		cur_pack_len = 0;
 }
 
+uint32_t star_base_sync_time_ms = 0;
+uint32_t star_local_sync_time_ms = 0;
+
 void loop_node()
 {
 	uint32_t ms = millis();
@@ -211,6 +240,14 @@ void loop_node()
 		uint8_t rx_pack_id = in_pack[8];
 		int is_good = 1;
 		if(rx_id != star_unit_id) is_good = 0;
+		if(rx_id == 0)
+		{
+			star_base_sync_time_ms = in_pack[12]<<24;
+			star_base_sync_time_ms |= in_pack[13]<<16;
+			star_base_sync_time_ms |= in_pack[14]<<8;
+			star_base_sync_time_ms |= in_pack[15];
+			star_local_sync_time_ms = millis();
+		}
 		if(rx_id == 0 && ms - last_asked_time > no_ask_timeout)
 		{
 			last_sync_time = ms;
@@ -249,6 +286,7 @@ void loop_node()
 		if(cur_pack_len > 0 && rx_pack_id != cur_out_pack[0] &&!rf_is_busy())
 		{
 			rf_send_and_listen(cur_out_pack, cur_pack_len);
+			last_star_sent_ms = ms;
 		}
 	}
 	if(0)if(ms - last_sync_time > no_sync_timeout && cur_pack_len > 0)
@@ -266,4 +304,16 @@ void star_loop_step()
 {
 	if(role_central) loop_central();
 	else loop_node();
+}
+
+uint32_t star_get_synced_time()
+{
+	uint32_t ms = millis();
+	int dt = ms - star_local_sync_time_ms;
+	return star_base_sync_time_ms + dt;
+}
+
+uint32_t star_get_last_sent_time()
+{
+	return last_star_sent_ms;
 }
