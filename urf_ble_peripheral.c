@@ -30,11 +30,38 @@ int ble_last_rx_pack_crc = 0;
 sLLData ll_link;
 sLLData ll_link_update;
 
-int ble_ll_same_event_response = 0; //experimentally found that with iPhones, we must respond
-//within the same connection event, with Samsung we _must not_ respond within the same connection
-//event, with other manufacturers sometimes both work, sometimes not. 
-//0 looks to be a better a priori guess - but if connection was lost without getting to ATT stage,
-//we will switch the mode
+#ifndef BLE_FORCE_SAME_EVENT_RESPONSE
+#define BLE_FORCE_SAME_EVENT_RESPONSE (0) // -1 = auto, 0 = force off, 1 = force on
+#endif
+
+int ble_ll_same_event_response = 0;
+
+static inline int ble_same_event_response_forced(void)
+{
+#if BLE_FORCE_SAME_EVENT_RESPONSE == 0
+	return 1;
+#elif BLE_FORCE_SAME_EVENT_RESPONSE == 1
+	return 1;
+#else
+	return 0;
+#endif
+}
+
+static inline void ble_same_event_response_reset(void)
+{
+#if BLE_FORCE_SAME_EVENT_RESPONSE == 0
+	ble_ll_same_event_response = 0;
+#elif BLE_FORCE_SAME_EVENT_RESPONSE == 1
+	ble_ll_same_event_response = 1;
+#else
+	ble_ll_same_event_response = 0;
+#endif
+}
+// experimentally found that with iPhones, we must respond
+// within the same connection event, with Samsung we _must not_ respond within the same connection
+// event, with other manufacturers sometimes both work, sometimes not.
+// 0 looks to be a better a priori guess - but if connection was lost without getting to ATT stage,
+// we will switch the mode (unless forced via BLE_FORCE_SAME_EVENT_RESPONSE)
 
 sATT_link att_link;
 sSMP_link smp_link;
@@ -368,7 +395,7 @@ void ble_LL_hop()
 #ifdef BLE_DEBUG_PRINTS
 		uprintf("LL timeout: %lu %lu\n", ms, ll_link.last_rx_event_time);
 #endif
-		if(!ll_link.reached_att_stage)
+		if(!ll_link.reached_att_stage && !ble_same_event_response_forced())
 			ble_ll_same_event_response = !ble_ll_same_event_response;
 	}
 //	else uprintf("hop to %d ec %d\n", chan, ll_link.event_count);
@@ -382,6 +409,8 @@ void ble_LL_start_connect()
 	ll_link.NESN = 0;
 	ll_link.our_params_requested = 0;
 	ll_link.reached_att_stage = 0;
+
+	ble_same_event_response_reset();
 
 	smp_link.response_pending = 0;
 	smp_link.in_pairing = 0;
@@ -645,13 +674,12 @@ int ble_LL_version_ind_req()
 	uprintf("LLVER %02X, %02X%02X\n", ble_rx_buffer[4], ble_rx_buffer[5], ble_rx_buffer[6]);
 #endif		
 	uint16_t manufacturer_id = (ble_rx_buffer[6]<<8) | ble_rx_buffer[5];
-	if(manufacturer_id == 0x0F) //Broadcomm, iphones, macs
+	if(!ble_same_event_response_forced())
 	{
-		ble_ll_same_event_response = 1;
-	}
-	if(manufacturer_id == 0x75) //Samsung
-	{
-		ble_ll_same_event_response = 0;
+		if(manufacturer_id == 0x0F) //Broadcomm, iphones, macs
+			ble_ll_same_event_response = 1;
+		if(manufacturer_id == 0x75) //Samsung
+			ble_ll_same_event_response = 0;
 	}
 	return LL_VERSION_IND;
 }
